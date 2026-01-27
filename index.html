@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MIJU App</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="bg"></div>
+
+  <main class="wrap">
+    <header class="top">
+      <div class="brand">
+        <div class="logo">M</div>
+        <div>
+          <h1>MIJU App</h1>
+          <p class="sub">Kubernetes • Jenkins • NFS • GitOps Ready</p>
+        </div>
+      </div>
+      <span class="badge ok">● RUNNING</span>
+    </header>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Service</h2>
+        <p class="big">nginx static</p>
+        <p class="muted">Lightweight image, fast cold start.</p>
+      </article>
+
+      <article class="card">
+        <h2>Build Info</h2>
+        <p class="muted">Commit</p>
+        <p class="mono" id="commit">unknown</p>
+        <p class="muted">Build Time</p>
+        <p class="mono" id="buildTime">unknown</p>
+      </article>
+
+      <article class="card">
+        <h2>Endpoints</h2>
+        <div class="pill">/</div>
+        <div class="pill">/healthz</div>
+        <div class="pill">/version</div>
+      </article>
+
+      <article class="card">
+        <h2>Status</h2>
+        <p class="muted">If you can see this, Docker build + container run succeeded.</p>
+        <div class="cta">
+          <a class="btn" href="/version">Open /version</a>
+          <a class="btn ghost" href="/healthz">Check /healthz</a>
+        </div>
+      </article>
+    </section>
+
+    <footer class="foot">
+      <span class="muted">© MIJU • DevOps Portfolio</span>
+      <span class="muted">Ready for GitHub Actions CD</span>
+    </footer>
+  </main>
+
+  <script>
+    // buildinfo.json이 있으면 화면에 뿌림 (GH Actions에서 파일 생성해서 COPY하면 예쁘게 연동됨)
+    fetch('/buildinfo.json', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (!j) return;
+        document.getElementById('commit').textContent = j.commit ?? 'unknown';
+        document.getElementById('buildTime').textContent = j.buildTime ?? 'unknown';
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
+
