@@ -156,4 +156,7 @@ h1{
 @media (max-width: 860px){
   .card{ grid-column: span 12; }
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 0190203 (init: nginx app with health endpoint)
