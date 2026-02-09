@@ -20,5 +20,5 @@ def hello():
 def health():
     return 'ok', 200
 
-if __name)) == '__main__'
+if __name)) == '__main__':
     app.run(host='0.0.0.0', port=8080)
