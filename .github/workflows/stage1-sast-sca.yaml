@@ -11,45 +11,6 @@ env:
   APP_NAME: miju-app
 
 jobs:
-  sonarqube-scan:
-    name: SonarQube Code Analysis
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-      
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
-        with:
-          args: >
-            -Dsonar.projectKey=${{ env.APP_NAME }}
-            -Dsonar.sources=.
-            -Dsonar.python.version=3.9
-            -Dsonar.exclusions=**/__pycache__/**,**/venv/**
-
-      - name: SonarQube Quality Gate
-        uses: sonarsource/sonarqube-quality-gate-action@master
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
-        continue-on-error: true
-  
   snyk-scan:
     name: Snyk Security Scan
     runs-on: ubuntu-latest
@@ -66,14 +27,14 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-
+      
       - name: Run Snyk to check dependencies
         uses: snyk/actions/python@master
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --file=requirements.txt --severity-threshold=medium --sarif-file-output=snyk-deps.sarif
+          args: --file=requirements.txt --severity-threshold=medium
       
       - name: Snyk Code Analysis
         uses: snyk/actions/python@master
@@ -82,21 +43,6 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: code test
-          args: --sarif-file-output=snyk-code.sarif
-      
-      - name: Upload Snyk results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: snyk-deps.sarif
-          category: snyk-dependencies
-
-      - name: Upload Snyk Code results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: snyk-code.sarif
-          category: snyk-code
   
   bandit-scan:
     name: Bandit Security Linter
@@ -116,26 +62,27 @@ jobs:
       
       - name: Run Bandit scan
         run: |
-          bandit -r . -f sarif -o bandit-report.sarif || true
-
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f txt || true
+      
       - name: Upload Bandit results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          sarif_file: bandit-report.sarif
-          category: bandit
+          name: bandit-report
+          path: bandit-report.json
   
   security-summary:
     name: Stage 1 Summary
     runs-on: ubuntu-latest
-    needs: [sonarqube-scan, snyk-scan, bandit-scan]
+    needs: [snyk-scan, bandit-scan]
     if: always()
     
     steps:
       - name: Stage 1 Complete
         run: |
           echo "✅ Stage 1: SAST & SCA completed"
-          echo "📊 SonarQube: Code quality analysis done"
           echo "🔍 Snyk: Dependency & code scanning done"
           echo "🐍 Bandit: Python security linting done"
+          echo "⚠️  SonarQube: Skipped (requires local server access)"
           echo "➡️  Proceeding to Stage 2"
