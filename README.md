@@ -6,3 +6,4 @@ This will trigger the complete 4-stage security pipeline:
 - Stage 3: Policy Enforcement
 - Stage 4: Deployment
 # Test SonarQube token
+# Cosign test
