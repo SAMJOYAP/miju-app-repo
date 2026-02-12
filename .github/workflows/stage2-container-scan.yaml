@@ -19,11 +19,11 @@ jobs:
       contents: read
       packages: write
       security-events: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -33,7 +33,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -43,7 +43,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
-      
+
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -63,14 +63,14 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
           exit-code: '0'
-      
+
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
           category: trivy-container-scan
-      
+
       - name: Run Trivy for detailed report
         uses: aquasecurity/trivy-action@master
         with:
@@ -82,18 +82,18 @@ jobs:
     name: Generate SBOM
     runs-on: ubuntu-latest
     needs: build-and-scan
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0
         with:
           path: .
           format: spdx-json
           output-file: sbom.spdx.json
-      
+
       - name: Generate SBOM with Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -110,7 +110,7 @@ jobs:
             sbom.spdx.json
             sbom.cyclonedx.json
           retention-days: 30
-      
+
       - name: Scan SBOM for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
@@ -118,7 +118,7 @@ jobs:
           scan-ref: 'sbom.cyclonedx.json'
           format: 'table'
           severity: 'CRITICAL,HIGH'
-  
+
   push-image:
     name: Push Scanned Image
     runs-on: ubuntu-latest
@@ -131,17 +131,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -162,16 +162,73 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
+
       - name: Trigger manifest repo update
         run: |
           echo "🔔 Image built and pushed: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
           echo "📦 Image digest: ${{ steps.build-push.outputs.digest }}"
           echo "➡️  Update manifest repo with new image tag"
-      
+
       - name: Stage 2 Complete
         run: |
           echo "✅ Stage 2: Container scanning completed"
           echo "🐳 Image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
+          echo "📦 SBOM generated (SPDX & CycloneDX)"
+          echo "➡️  Ready for Stage 3: Policy Enforcement"
+
+  sign-image:
+    name: Sign Container Image with Cosign
+    runs-on: ubuntu-latest
+    needs: [push-image]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata for signing
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "🔏 Signing image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
+          cosign sign --yes ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          echo "✅ Image signed successfully"
+      
+      - name: Verify signature
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "🔍 Verifying signature..."
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${{ github.repository_owner }}/.*" \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          echo "✅ Signature verified"
+      
+      - name: Stage 2 Complete with Signing
+        run: |
+          echo "✅ Stage 2: Container scanning & signing completed"
+          echo "🐳 Image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
+          echo "🔏 Image signed with Cosign (keyless)"
           echo "📦 SBOM generated (SPDX & CycloneDX)"
           echo "➡️  Ready for Stage 3: Policy Enforcement"
